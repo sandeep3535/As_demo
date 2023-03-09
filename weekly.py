@@ -77,11 +77,11 @@ class StoreWeeklyUser:
 
         while await self.isHoliday(next_week_date):
             next_week_date = next_week_date - timedelta(days=1)
-
-        next_week_date = next_week_date.replace(hour=int(start_time[:2]),
-                                                minute=int(start_time[3:5]),
-                                                second=int(start_time[-2]),
-                                                microsecond=0).strftime("%d-%m-%Y %H:%M:%S")
+        start_time = datetime.strptime(start_time, "%H:%M:%S")
+        next_week_date = next_week_date.replace(hour=start_time.hour,
+                                                minute=start_time.minute,
+                                                second=start_time.second,
+                                                microsecond=start_time.microsecond).strftime("%d-%m-%Y %H:%M:%S")
 
         return next_week_date
 
@@ -102,10 +102,12 @@ class StoreWeeklyUser:
         last_date = last_date + timedelta(days=plus_days)
         while await self.isHoliday(last_date):
             last_date = last_date - timedelta(days=1)
-        last_date = last_date.replace(hour=int(start_time[:2]),
-                                      minute=int(start_time[3:5]),
-                                      second=int(start_time[-2]),
-                                      microsecond=0).strftime("%d-%m-%Y %H:%M:%S")
+        start_time = datetime.strptime(start_time, "%H:%M:%S")
+        last_date = last_date.replace(hour=start_time.hour,
+                                      minute=start_time.minute,
+                                      second=start_time.second,
+                                      microsecond=start_time.microsecond).strftime("%d-%m-%Y %H:%M:%S")
+        return last_date
 
     async def getIntradayTime(self, start_time=None):
         execute_date = datetime.now()
@@ -128,10 +130,11 @@ class StoreWeeklyUser:
             execute_date = datetime.strptime(execute_date, "%d-%m-%Y %H:%M:%S")
             while await self.isHoliday(execute_date):
                 execute_date = execute_date + timedelta(days=1)
-            execute_date = execute_date.replace(hour=int(start_time[:2]),
-                                                minute=int(start_time[3:5]),
-                                                second=int(start_time[-2]),
-                                                microsecond=0).strftime("%d-%m-%Y %H:%M:%S")
+            start_time = datetime.strptime(start_time, "%H:%M:%S")
+            execute_date = execute_date.replace(hour=start_time.hour,
+                                                minute=start_time.minute,
+                                                second=start_time.second,
+                                                microsecond=start_time.microsecond).strftime("%d-%m-%Y %H:%M:%S")
             return execute_date
 
     async def storeDataSqlite(self):
