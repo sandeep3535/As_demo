@@ -23,32 +23,41 @@ class StoreWeeklyUser:
                                                          value_filter={"_id": 0, "strategy_type": 1,
                                                                        "start_day": 1,
                                                                        "start_time": 1,
-                                                                       "code": 1
+                                                                       "code": 1,
+                                                                       "days_delta": 1,
+                                                                       "duration_delta": 1
                                                                        })
         for data in strategy_time:
             if data['strategy_type'] == 'intraday':
-                data['start_time'] = datetime.strptime(await self.getIntradayTime(start_time=data['start_time']),
+                data['start_time'] = datetime.strptime(await self.getIntradayTime(start_time=data['start_time'],
+                                                                                  day_delta=data['days_delta']),
                                                        "%d-%m-%Y %H:%M:%S")
                 del data['strategy_type']
                 del data['start_day']
             elif data['strategy_type'] == 'carry_forward':
-                data['start_time'] = datetime.strptime(await self.getIntradayTime(start_time=data['start_time']),
+                data['start_time'] = datetime.strptime(await self.getIntradayTime(start_time=data['start_time'],
+                                                                                  day_delta=data['start_time']),
                                                        "%d-%m-%Y %H:%M:%S")
                 del data['strategy_type']
                 del data['start_day']
             elif data['strategy_type'] == 'weekly':
                 data['start_time'] = datetime.strptime(
-                    await self.getWeeklyTime(start_day=data['start_day'], start_time=data['start_time']),
+                    await self.getWeeklyTime(start_day=data['start_day'],
+                                             start_time=data['start_time'],
+                                             day_delta=data['days_delta'],
+                                             duration_delta=data['duration_delta']),
                     "%d-%m-%Y %H:%M:%S")
                 del data['strategy_type']
                 del data['start_day']
             elif data['strategy_type'] == 'monthly':
                 data['start_time'] = datetime.strptime(
-                    await self.getMonthlyTime(start_day=data['start_day'], start_time=data['start_time']),
+                    await self.getMonthlyTime(start_day=data['start_day'],
+                                              start_time=data['start_time'],
+                                              day_delta=data['days_delta'],
+                                              duration_delta=data['duration_delta']),
                     "%d-%m-%Y %H:%M:%S")
                 del data['strategy_type']
                 del data['start_day']
-
         return strategy_time
 
     async def isHoliday(self, date_time: datetime = None) -> bool:
@@ -62,80 +71,60 @@ class StoreWeeklyUser:
         else:
             return False
 
-    async def getWeeklyTime(self, start_day=None, start_time=None):
-        current_date = datetime.now()
-        day_list = [day for day in calendar.day_name]
-        current_weekday = current_date.weekday()
-        if current_weekday == day_list.index(start_day):
-            plus_days = 7
-        elif current_weekday > day_list.index(start_day):
-            plus_days = (7 - (current_weekday - day_list.index(start_day)))
-        else:
-            plus_days = day_list.index(start_day) - current_weekday
+    async def getIntradayTime(self, start_time: str, datetimeobj: datetime = None, day_delta=0):
+        start_time = datetime.strptime(start_time, "%H:%M:%S").time()
+        datetimeobj = datetime.now() if datetimeobj is None else datetimeobj
+        datetimeobj = datetimeobj + timedelta(days=day_delta)
+        if datetimeobj < datetime.now():
+            datetimeobj = datetimeobj - timedelta(days=day_delta)
+            datetimeobj = datetimeobj + timedelta(days=1)
+        datetimeobj = datetimeobj.replace(hour=start_time.hour,
+                                          minute=start_time.minute,
+                                          second=start_time.second,
+                                          microsecond=start_time.microsecond)
+        while await self.isHoliday(datetimeobj):
+            datetimeobj = datetimeobj + timedelta(days=1)
+        if datetimeobj <= datetime.now():
+            day_delta += 1
+            return await self.getIntradayTime(start_time=str(start_time), day_delta=day_delta)
+        return datetimeobj
 
-        next_week_date = current_date + timedelta(days=plus_days)
+    async def getWeeklyTime(self, start_day: str, start_time: str, duration_delta=0, day_delta=0):
+        weekdays = [day for day in calendar.day_name]
+        next_weekday = weekdays.index(start_day.capitalize())
+        today = datetime.today().weekday()
+        days_until_next_weekday = (next_weekday - today) % 7
+        next_weekday_date = datetime.today() + timedelta(days=days_until_next_weekday)
+        next_weekday_datetime_str = f'{next_weekday_date.strftime("%Y-%m-%d")} {start_time}'
+        next_weekday_datetime = datetime.strptime(next_weekday_datetime_str, '%Y-%m-%d %H:%M:%S')
+        next_weekday_datetime = next_weekday_datetime + timedelta(days=7 * duration_delta)
+        next_weekday_datetime = next_weekday_datetime + timedelta(days=day_delta)
+        while await self.isHoliday(next_weekday_datetime):
+            next_weekday_datetime = next_weekday_datetime - timedelta(days=1)
+        if next_weekday_datetime <= datetime.now():
+            duration_delta += 1
+            return await self.getWeeklyTime(start_day=start_day, start_time=start_time, duration_delta=duration_delta,
+                                            day_delta=day_delta)
+        return next_weekday_datetime
 
-        while await self.isHoliday(next_week_date):
-            next_week_date = next_week_date - timedelta(days=1)
-        start_time = datetime.strptime(start_time, "%H:%M:%S")
-        next_week_date = next_week_date.replace(hour=start_time.hour,
-                                                minute=start_time.minute,
-                                                second=start_time.second,
-                                                microsecond=start_time.microsecond).strftime("%d-%m-%Y %H:%M:%S")
-
-        return next_week_date
-
-    async def getMonthlyTime(self, start_day=None, start_time=None):
-        current_date = datetime.today().date()
-        day_list = [day for day in calendar.day_name]
-        _date = calendar.monthrange(current_date.year, current_date.month)
-        day = _date[1]
-        last_date = datetime(current_date.year, current_date.month, day)
-        last_day_num = last_date.weekday()
-        if last_day_num == day_list.index(start_day):
-            plus_days = 0
-        elif last_day_num > day_list.index(start_day):
-            plus_days = day_list.index(start_day) - last_day_num
-        else:
-            plus_days = day_list.index(start_day) - last_day_num - 7
-
-        last_date = last_date + timedelta(days=plus_days)
-        while await self.isHoliday(last_date):
-            last_date = last_date - timedelta(days=1)
-        start_time = datetime.strptime(start_time, "%H:%M:%S")
-        last_date = last_date.replace(hour=start_time.hour,
-                                      minute=start_time.minute,
-                                      second=start_time.second,
-                                      microsecond=start_time.microsecond).strftime("%d-%m-%Y %H:%M:%S")
-        return last_date
-
-    async def getIntradayTime(self, start_time=None):
-        execute_date = datetime.now()
-
-        execute_date = execute_date.replace(hour=int(start_time[:2]),
-                                            minute=int(start_time[3:5]),
-                                            second=int(start_time[-2]),
-                                            microsecond=0).strftime("%d-%m-%Y %H:%M:%S")
-        execute_date_timestamp = datetime.strptime(execute_date, "%d-%m-%Y %H:%M:%S").timestamp()
-        if datetime.now().timestamp() > execute_date_timestamp:
-            new_date = datetime.fromtimestamp(execute_date_timestamp) + timedelta(days=1)
-            while await self.isHoliday(new_date):
-                new_date = new_date + timedelta(days=1)
-            new_date = new_date.replace(hour=int(start_time[:2]),
-                                        minute=int(start_time[3:5]),
-                                        second=int(start_time[-2]),
-                                        microsecond=0).strftime("%d-%m-%Y %H:%M:%S")
-            return new_date
-        else:
-            execute_date = datetime.strptime(execute_date, "%d-%m-%Y %H:%M:%S")
-            while await self.isHoliday(execute_date):
-                execute_date = execute_date + timedelta(days=1)
-            start_time = datetime.strptime(start_time, "%H:%M:%S")
-            execute_date = execute_date.replace(hour=start_time.hour,
-                                                minute=start_time.minute,
-                                                second=start_time.second,
-                                                microsecond=start_time.microsecond).strftime("%d-%m-%Y %H:%M:%S")
-            return execute_date
+    async def getMonthlyTime(self, start_day: str, start_time: str, day_delta=0, duration_delta=0):
+        now = datetime.now() + timedelta(days=30 * duration_delta)
+        start_time = datetime.strptime(start_time, "%H:%M:%S").time()
+        last_day = datetime(now.year, now.month, 1) + timedelta(days=32)
+        last_day = last_day.replace(day=1) - timedelta(days=1)
+        for i in range(last_day.day, 0, -1):
+            date = datetime(now.year, now.month, i)
+            if date.strftime('%A') == start_day:
+                next_month_datetime = datetime.combine(date, start_time)
+                next_month_datetime = next_month_datetime + timedelta(days=day_delta)
+                while await self.isHoliday(next_month_datetime):
+                    next_month_datetime = next_month_datetime - timedelta(days=1)
+                if next_month_datetime <= datetime.now():
+                    duration_delta += 1
+                    return await self.getMonthlyTime(start_day=start_day, start_time=str(start_time),
+                                                     day_delta=day_delta,
+                                                     duration_delta=duration_delta)
+                return next_month_datetime
 
     async def storeDataSqlite(self):
         sqlitedb = SqliteDB()
@@ -204,4 +193,3 @@ class StoreWeeklyUser:
 
 
 if __name__ == '__main__':
-    print(asyncio.run(StoreWeeklyUser().getWeeklyTime(start_day="Thursday", start_time="15:10:00")))
