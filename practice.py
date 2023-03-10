@@ -1,14 +1,4 @@
-# import sqlite3
-# import pandas as pd
-#
-# conn = sqlite3.connect("D:\Projects\AS Paper\store\AlgoSuccess.db")
-# df = pd.read_sql_query(sql="SELECT * FROM instruments_angel_one", con=conn)
-# conn.commit()
-# conn.close()
-#
-# pd.set_option("display.max_columns", None)
-# # df.index = df["SYMBOL"]
-# print()
+
 import asyncio
 import pandas as pd
 import aiohttp
